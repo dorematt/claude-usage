@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.1 — TBD
+
+### Packaging
+
+- Add Homebrew formula at `Formula/claude-usage.rb` and install instructions; `claude-usage` is now installable on macOS/Linux without `git clone` (#46, #71, thanks @HaydenHaines)
+
 ## v1.1.0 — 2026-05-28
 
 ### Dashboard
