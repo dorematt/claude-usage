@@ -124,6 +124,67 @@ class TestGetDashboardData(unittest.TestCase):
         self.assertTrue(all(r["day"] == "2026-04-08" for r in rows))
 
 
+class TestEmptyStringModelNormalization(unittest.TestCase):
+    """Regression: turns with model='' (empty string) must group as 'unknown'.
+    COALESCE(model, 'unknown') alone returns '' because empty string isn't NULL;
+    NULLIF(model, '') is needed first."""
+
+    def setUp(self):
+        self.tmpfile = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+        self.tmpfile.close()
+        self.db_path = Path(self.tmpfile.name)
+        conn = get_db(self.db_path)
+        init_db(conn)
+        upsert_sessions(conn, [{
+            "session_id": "sess-empty", "project_name": "u/p",
+            "first_timestamp": "2026-04-08T09:00:00Z",
+            "last_timestamp": "2026-04-08T09:05:00Z",
+            "git_branch": "", "model": "",
+            "total_input_tokens": 100, "total_output_tokens": 50,
+            "total_cache_read": 0, "total_cache_creation": 0,
+            "turn_count": 1,
+        }])
+        insert_turns(conn, [{
+            "session_id": "sess-empty", "timestamp": "2026-04-08T09:05:00Z",
+            "model": "", "input_tokens": 100, "output_tokens": 50,
+            "cache_read_tokens": 0, "cache_creation_tokens": 0,
+            "tool_name": None, "cwd": "/tmp",
+        }])
+        conn.commit()
+        conn.close()
+
+    def tearDown(self):
+        os.unlink(self.db_path)
+
+    def test_all_models_contains_unknown_not_empty(self):
+        data = get_dashboard_data(db_path=self.db_path)
+        self.assertIn("unknown", data["all_models"])
+        self.assertNotIn("", data["all_models"])
+
+    def test_daily_by_model_contains_unknown_not_empty(self):
+        data = get_dashboard_data(db_path=self.db_path)
+        models = {r["model"] for r in data["daily_by_model"]}
+        self.assertIn("unknown", models)
+        self.assertNotIn("", models)
+
+    def test_hourly_by_model_contains_unknown_not_empty(self):
+        data = get_dashboard_data(db_path=self.db_path)
+        models = {r["model"] for r in data["hourly_by_model"]}
+        self.assertIn("unknown", models)
+        self.assertNotIn("", models)
+
+
+class TestNonBillableModelFallback(unittest.TestCase):
+    """Regression: when the user has only non-billable models (e.g. gemma, glm,
+    local LLMs) — or all turns lack a model field — the default model selection
+    must fall back to ALL models so the dashboard isn't blank."""
+
+    def test_readurlmodels_fallback_in_html_template(self):
+        # The fallback logic is JS; we assert the source contains the guard so
+        # a future refactor doesn't silently remove it.
+        self.assertIn("billable.length ? billable : allModels", HTML_TEMPLATE)
+
+
 class TestDashboardHTTP(unittest.TestCase):
     """Integration test: start server and make HTTP requests."""
 
