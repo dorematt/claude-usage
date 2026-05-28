@@ -22,7 +22,7 @@ def get_dashboard_data(db_path=DB_PATH):
 
     # ── All models (for filter UI) ────────────────────────────────────────────
     model_rows = conn.execute("""
-        SELECT COALESCE(model, 'unknown') as model
+        SELECT COALESCE(NULLIF(model, ''), 'unknown') as model
         FROM turns
         GROUP BY model
         ORDER BY SUM(input_tokens + output_tokens) DESC
@@ -33,7 +33,7 @@ def get_dashboard_data(db_path=DB_PATH):
     daily_rows = conn.execute("""
         SELECT
             substr(timestamp, 1, 10)   as day,
-            COALESCE(model, 'unknown') as model,
+            COALESCE(NULLIF(model, ''), 'unknown') as model,
             SUM(input_tokens)          as input,
             SUM(output_tokens)         as output,
             SUM(cache_read_tokens)     as cache_read,
@@ -60,7 +60,7 @@ def get_dashboard_data(db_path=DB_PATH):
         SELECT
             substr(timestamp, 1, 10)                  as day,
             CAST(substr(timestamp, 12, 2) AS INTEGER) as hour,
-            COALESCE(model, 'unknown')                as model,
+            COALESCE(NULLIF(model, ''), 'unknown')                as model,
             SUM(output_tokens)                        as output,
             COUNT(*)                                  as turns
         FROM turns
@@ -561,15 +561,21 @@ function modelPriority(m) {
 
 function readURLModels(allModels) {
   const param = new URLSearchParams(window.location.search).get('models');
-  if (!param) return new Set(allModels.filter(m => isBillable(m)));
+  if (!param) {
+    const billable = allModels.filter(m => isBillable(m));
+    // Fallback: if the user only has non-billable / unknown models (e.g. all
+    // local-LLM runs), default to all models so the dashboard isn't blank.
+    return new Set(billable.length ? billable : allModels);
+  }
   const fromURL = new Set(param.split(',').map(s => s.trim()).filter(Boolean));
   return new Set(allModels.filter(m => fromURL.has(m)));
 }
 
 function isDefaultModelSelection(allModels) {
   const billable = allModels.filter(m => isBillable(m));
-  if (selectedModels.size !== billable.length) return false;
-  return billable.every(m => selectedModels.has(m));
+  const expected = billable.length ? billable : allModels;
+  if (selectedModels.size !== expected.length) return false;
+  return expected.every(m => selectedModels.has(m));
 }
 
 function buildFilterUI(allModels) {
