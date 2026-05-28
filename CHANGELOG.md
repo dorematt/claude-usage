@@ -2,12 +2,23 @@
 
 ## v1.1.0 — 2026-05-28
 
-- Fix `ReferenceError: cutoff is not defined` that blanked the dashboard whenever the hourly filter ran (#73, thanks @thomasleveil)
+### Dashboard
+
+- Fix `ReferenceError: cutoff is not defined` in the hourly filter that blanked the entire dashboard (#73, thanks @thomasleveil)
 - Fix hourly chart ignoring the range upper bound for `week` / `month` / `prev-month` ranges
-- Fix 404 on dashboard URLs containing query strings (`?range=...&models=...`) so reloads and bookmarks work (#81, thanks @jakduch)
-- Fix incremental scan not updating `first_timestamp` when a newly discovered session's records arrive out of order (#111, thanks @Fruhji)
+- Fix 404 on dashboard URLs containing query strings (`?range=...&models=...`) so reloads and bookmarks work, with regression tests (#81, thanks @jakduch)
+- Fix blank dashboard for users whose data only contains non-billable / unknown models, or rows with empty model names: `COALESCE(NULLIF(model, ''), 'unknown')` normalises empty-string models, and the default selection falls back to all models when no billable models exist (#109, thanks @HaydenHaines)
 - Use `ThreadingHTTPServer` so a slow `/api/data` no longer blocks other dashboard requests (#79, thanks @jakduch)
-- Adopt `AGENTS.md` (shared with Codex); `CLAUDE.md` is now a thin `@AGENTS.md` import
+- Add a `Today` range button (#112, thanks @Fruhji)
+
+### Scanner
+
+- Fix incremental scan not updating `first_timestamp` when a newly discovered session's records arrive out of order (#111, thanks @Fruhji)
+
+### Project / docs
+
+- Adopt `AGENTS.md` as the canonical agent guide (shared with Codex); `CLAUDE.md` is now a thin `@AGENTS.md` import
+- Codify the rule that future PR merges must preserve original-author commits (`merge --no-ff` for full merges, `cherry-pick` for partial, `Co-Authored-By` trailers when applying hunks manually)
 - Drop unused `.claude/launch.json`
 
 ## v1.0.0 — 2026-04-09
