@@ -1,0 +1,11 @@
+.vscode/**
+.gitignore
+.vscodeignore
+src/**
+test/**
+scripts/**
+node_modules/**
+out/**/*.map
+*.vsix
+tsconfig.json
+vitest.config.ts

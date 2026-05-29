@@ -1,0 +1,97 @@
+import { describe, it, expect } from "vitest";
+import { renderHtml, escapeHtml, makeNonce } from "../src/sidebar";
+
+describe("escapeHtml", () => {
+  it("escapes the five HTML-significant characters", () => {
+    expect(escapeHtml(`<script>alert("x&y'z")</script>`))
+      .toBe("&lt;script&gt;alert(&quot;x&amp;y&#39;z&quot;)&lt;/script&gt;");
+  });
+
+  it("passes through safe text unchanged", () => {
+    expect(escapeHtml("Claude Usage Dashboard")).toBe("Claude Usage Dashboard");
+  });
+
+  it("handles empty input", () => {
+    expect(escapeHtml("")).toBe("");
+  });
+});
+
+describe("makeNonce", () => {
+  it("is base64url (alphanumeric plus - and _, no padding)", () => {
+    expect(makeNonce()).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+
+  it("is exactly 32 chars (24 random bytes → 32 base64url chars)", () => {
+    expect(makeNonce()).toHaveLength(32);
+  });
+
+  it("yields different values on consecutive calls", () => {
+    expect(makeNonce()).not.toBe(makeNonce());
+  });
+});
+
+describe("renderHtml with iframe URL", () => {
+  const NONCE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+
+  it("embeds the iframe pointing at the given URL", () => {
+    const html = renderHtml("http://127.0.0.1:54321/", "", NONCE);
+    expect(html).toContain('src="http://127.0.0.1:54321/"');
+    expect(html).toContain("<iframe");
+  });
+
+  it("escapes URL into the iframe src so attribute syntax can't break", () => {
+    const html = renderHtml(`http://127.0.0.1:9000/?q="><script>x</script>`, "", NONCE);
+    expect(html).not.toContain("<script>x</script>");
+    expect(html).toContain("&quot;");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("includes a CSP frame-src that allows localhost", () => {
+    const html = renderHtml("http://127.0.0.1:9000/", "", NONCE);
+    expect(html).toContain("frame-src http://127.0.0.1:* http://localhost:*");
+  });
+
+  it("includes the script-src nonce", () => {
+    const html = renderHtml("http://127.0.0.1:9000/", "", NONCE);
+    expect(html).toContain(`script-src 'nonce-${NONCE}'`);
+  });
+
+  it("sandbox attribute restricts iframe to the minimum needed", () => {
+    const html = renderHtml("http://127.0.0.1:9000/", "", NONCE);
+    expect(html).toContain("sandbox=\"allow-scripts allow-same-origin allow-forms\"");
+    // Specifically NOT allow-popups (the dashboard doesn't open new windows).
+    expect(html).not.toContain("allow-popups");
+  });
+
+  it("frame-src does NOT include third-party CDN (iframe has its own CSP)", () => {
+    const html = renderHtml("http://127.0.0.1:9000/", "", NONCE);
+    expect(html).not.toContain("cdn.jsdelivr.net");
+  });
+});
+
+describe("renderHtml with null URL (status pane)", () => {
+  const NONCE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345";
+
+  it("renders the placeholder when no URL is set", () => {
+    const html = renderHtml(null, "", NONCE);
+    expect(html).toContain("Claude Code Usage");
+    expect(html).toContain("not running yet");
+    expect(html).not.toContain("<iframe");
+  });
+
+  it("renders a custom status message when provided", () => {
+    const html = renderHtml(null, "Server failed to bind to port 8080", NONCE);
+    expect(html).toContain("Server failed to bind to port 8080");
+  });
+
+  it("escapes status text", () => {
+    const html = renderHtml(null, "<img onerror=x>", NONCE);
+    expect(html).not.toContain("<img onerror=x>");
+    expect(html).toContain("&lt;img onerror=x&gt;");
+  });
+
+  it("does NOT include the frame-src CSP (no iframe to allow)", () => {
+    const html = renderHtml(null, "", NONCE);
+    expect(html).not.toContain("frame-src");
+  });
+});

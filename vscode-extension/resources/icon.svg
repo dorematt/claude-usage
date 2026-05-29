@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <!-- Simple bar-chart glyph for the activity bar.
+       Uses currentColor so VS Code's theming (light/dark) just works. -->
+  <path fill="currentColor" d="M3 21V11h4v10H3zm7 0V3h4v18h-4zm7 0v-7h4v7h-4z"/>
+</svg>

@@ -60,6 +60,19 @@ cd claude-usage
 python cli.py dashboard
 ```
 
+### VS Code extension
+
+The dashboard also runs as a VS Code extension that lives in the activity-bar sidebar — no separate browser tab needed.
+
+```
+git clone https://github.com/phuryn/claude-usage
+cd claude-usage/vscode-extension
+./scripts/install.sh        # macOS / Linux / WSL
+.\scripts\install.ps1       # Windows
+```
+
+The extension auto-discovers `claude-usage` on `PATH` (Homebrew users get it for free) or the repo's `cli.py` (clone users). Open via Command Palette → **Claude Usage: Open Dashboard**. See [vscode-extension/](vscode-extension/) for details.
+
 ---
 
 ## Usage
@@ -135,3 +148,4 @@ Costs are calculated using **Anthropic API pricing as of April 2026** ([claude.c
 | `dashboard.py` | HTTP server + single-page HTML/JS dashboard |
 | `cli.py` | `scan`, `today`, `stats`, `dashboard` commands |
 | `Formula/claude-usage.rb` | Homebrew formula — install with `brew install --formula <raw-url>` |
+| `vscode-extension/` | VS Code extension — embeds the dashboard inside VS Code |
