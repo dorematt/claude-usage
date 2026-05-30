@@ -111,7 +111,9 @@ class Extension {
     // Probe a dashboard-specific endpoint so we don't get fooled by some
     // other localhost service listening on the same port.
     const probeUrl = `http://${host}:${port}/api/data`;
-    const spawnArgs = dashboardSpawnArgs(mode, python, ["--host", host, "--port", String(port)]);
+    // --no-browser: the dashboard is embedded in the webview, so the bundled
+    // cli.py must not also pop a system browser (it does by default for CLI users).
+    const spawnArgs = dashboardSpawnArgs(mode, python, ["--no-browser", "--host", host, "--port", String(port)]);
     if (!spawnArgs) {
       const msg = "Could not assemble a valid command to spawn the dashboard.";
       this.output.appendLine(msg);

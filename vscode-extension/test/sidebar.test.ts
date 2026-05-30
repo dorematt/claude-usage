@@ -77,10 +77,11 @@ describe("renderHtml with iframe URL", () => {
     expect(html).toContain(`script-src 'nonce-${NONCE}'`);
   });
 
-  it("sandbox attribute restricts iframe to the minimum needed", () => {
+  it("sandbox grants only what the dashboard needs (incl. downloads for CSV export)", () => {
     const html = renderHtml("http://127.0.0.1:9000/", "", NONCE);
-    expect(html).toContain("sandbox=\"allow-scripts allow-same-origin allow-forms\"");
-    // Specifically NOT allow-popups (the dashboard doesn't open new windows).
+    expect(html).toContain("sandbox=\"allow-scripts allow-same-origin allow-forms allow-downloads\"");
+    // allow-downloads lets the dashboard's CSV export (a Blob + a.download click)
+    // work inside the webview. Specifically NOT allow-popups — it doesn't open windows.
     expect(html).not.toContain("allow-popups");
   });
 

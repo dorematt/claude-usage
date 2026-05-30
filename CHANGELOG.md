@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.2.3 — 2026-05-30
+
+### Extension
+
+- Fixed CSV export (Download CSV buttons / "Download CSV to see all" links) not working inside the VS Code webview. The dashboard iframe's sandbox was missing `allow-downloads`, so Chromium silently blocked the Blob download; added the token. Keeps the export client-side, so it still respects the current model/range/sort filters.
+- The extension no longer pops a system browser tab when opening the dashboard — it passes the new `--no-browser` flag to the bundled `cli.py dashboard`. Running `python cli.py dashboard` as a script still opens the browser as before.
+- Matched the webview's pre-load / behind-iframe background to the dashboard (`#191A1B`), removing the brief `#0f1117` flash before the dashboard renders.
+
+### Scanner / CLI
+
+- Added a `--no-browser` flag to `cli.py dashboard` to start the server without opening a browser (used by the VS Code extension; standalone CLI usage is unchanged).
+
 ## v1.2.2 — 2026-05-30
 
 ### Dashboard
