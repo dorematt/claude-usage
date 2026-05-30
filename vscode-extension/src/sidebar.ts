@@ -13,6 +13,10 @@ import { ServerManager } from "./server-manager";
  * We rely on VS Code's webview Content-Security-Policy. Allowing the
  * dashboard's localhost origin via `frame-src http://127.0.0.1:* http://localhost:*`
  * is enough; the dashboard ships its own CSP for what it loads inside.
+ *
+ * The iframe sandbox includes `allow-downloads` so the dashboard's CSV export
+ * (a Blob + `a.download` click) works inside the webview — without it Chromium
+ * silently blocks the download.
  */
 export function renderHtml(url: string | null, statusText: string, nonce: string): string {
   if (url) {
@@ -24,12 +28,12 @@ export function renderHtml(url: string | null, statusText: string, nonce: string
       content="default-src 'none'; frame-src http://127.0.0.1:* http://localhost:*; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <title>Claude Usage</title>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; background: #0f1117; }
+  html, body { margin: 0; padding: 0; height: 100%; background: #191A1B; }
   iframe { border: 0; width: 100%; height: 100vh; display: block; }
 </style>
 </head>
 <body>
-<iframe src="${escapeHtml(url)}" sandbox="allow-scripts allow-same-origin allow-forms"></iframe>
+<iframe src="${escapeHtml(url)}" sandbox="allow-scripts allow-same-origin allow-forms allow-downloads"></iframe>
 </body>
 </html>`;
   }
@@ -42,7 +46,7 @@ export function renderHtml(url: string | null, statusText: string, nonce: string
       content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
 <title>Claude Usage</title>
 <style>
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e2e8f0; background: #0f1117; padding: 24px; line-height: 1.5; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #e2e8f0; background: #191A1B; padding: 24px; line-height: 1.5; }
   h2 { color: #d97757; font-weight: 600; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 16px; }
   pre { background: #1a1d27; border: 1px solid #2a2d3a; border-radius: 6px; padding: 12px; font-size: 12px; color: #8892a4; white-space: pre-wrap; word-break: break-word; max-width: 100%; }
   p { color: #8892a4; font-size: 13px; }
