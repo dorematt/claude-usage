@@ -269,7 +269,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     <h1>Claude Code Usage</h1>
   </div>
   <div class="meta" id="meta">Loading...</div>
-  <button id="rescan-btn" onclick="triggerRescan()" title="Rebuild the database from scratch by re-scanning all JSONL files. Use if data looks stale or costs seem wrong.">&#x21bb; Rescan</button>
+  <button id="rescan-btn" onclick="triggerRescan()" title="Scan for new usage since the last update. Adds new turns without affecting existing history.">&#x21bb; Rescan</button>
 </header>
 
 <div id="filter-bar">
@@ -390,7 +390,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
 
 <footer>
   <div class="footer-content">
-    <p>Cost estimates based on Anthropic API pricing (<a href="https://claude.com/pricing#api" target="_blank">claude.com/pricing#api</a>) as of May 2026. Only models containing <em>fable</em>, <em>mythos</em>, <em>opus</em>, <em>sonnet</em>, or <em>haiku</em> in the name are included in cost calculations. Actual costs for Max/Pro subscribers differ from API pricing.</p>
+    <p>Cost estimates based on Anthropic API pricing (<a href="https://claude.com/pricing#api" target="_blank">claude.com/pricing#api</a>) as of June 2026. Only models containing <em>fable</em>, <em>mythos</em>, <em>opus</em>, <em>sonnet</em>, or <em>haiku</em> in the name are included in cost calculations. Actual costs for Max/Pro subscribers differ from API pricing.</p>
     <p>
       GitHub: <a href="https://github.com/phuryn/claude-usage" target="_blank">https://github.com/phuryn/claude-usage</a>
       &nbsp;&middot;&nbsp;
@@ -487,12 +487,13 @@ function tzDisplayName(tzMode) {
   }
 }
 
-// ── Pricing (Anthropic API, April 2026) ────────────────────────────────────
+// ── Pricing (Anthropic API, June 2026) ─────────────────────────────────────
 const PRICING = {
   // Fable / Mythos — Anthropic's most capable class, priced at 2x Opus.
   // (Mythos 5 shares Fable 5's pricing; Project-Glasswing access only.)
   'claude-fable-5':    { input: 10.00, output: 50.00, cache_write: 12.50, cache_read: 1.00 },
   'claude-mythos-5':   { input: 10.00, output: 50.00, cache_write: 12.50, cache_read: 1.00 },
+  'claude-opus-4-8':   { input:  5.00, output: 25.00, cache_write:  6.25, cache_read: 0.50 },
   'claude-opus-4-7':   { input:  5.00, output: 25.00, cache_write:  6.25, cache_read: 0.50 },
   'claude-opus-4-6':   { input:  5.00, output: 25.00, cache_write:  6.25, cache_read: 0.50 },
   'claude-opus-4-5':   { input:  5.00, output: 25.00, cache_write:  6.25, cache_read: 0.50 },
@@ -519,7 +520,7 @@ function getPricing(model) {
   }
   const m = model.toLowerCase();
   if (m.includes('fable') || m.includes('mythos')) return PRICING['claude-fable-5'];
-  if (m.includes('opus'))   return PRICING['claude-opus-4-7'];
+  if (m.includes('opus'))   return PRICING['claude-opus-4-8'];
   if (m.includes('sonnet')) return PRICING['claude-sonnet-4-6'];
   if (m.includes('haiku'))  return PRICING['claude-haiku-4-5'];
   return null;
@@ -920,7 +921,7 @@ function renderStats(t) {
     { label: 'Output Tokens',  value: fmt(t.output),               sub: rangeLabel },
     { label: 'Cache Read',     value: fmt(t.cache_read),           sub: 'from prompt cache' },
     { label: 'Cache Creation', value: fmt(t.cache_creation),       sub: 'writes to prompt cache' },
-    { label: 'Est. Cost',      value: fmtCostBig(t.cost),          sub: 'API pricing, May 2026', color: C.green },
+    { label: 'Est. Cost',      value: fmtCostBig(t.cost),          sub: 'API pricing, June 2026', color: C.green },
   ];
   document.getElementById('stats-row').innerHTML = stats.map(s => `
     <div class="stat-card">
@@ -1544,14 +1545,15 @@ class DashboardHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         if path == "/api/rescan":
-            # Full rebuild: delete DB and rescan from scratch.
+            # Incremental scan: ingest new/changed JSONL without touching
+            # existing rows. The DB is append-only and the only durable store
+            # of history once Claude Code prunes old transcripts, so we must
+            # never delete it here — scan() dedupes via the message_id index.
             # Pass DB_PATH / DEFAULT_PROJECTS_DIRS explicitly so tests that
             # patch the module globals are honored (scan's defaults are
             # frozen at def time and would otherwise target the real paths).
             import scanner
             db_path = DB_PATH
-            if db_path.exists():
-                db_path.unlink()
             result = scanner.scan(
                 db_path=db_path,
                 projects_dirs=scanner.DEFAULT_PROJECTS_DIRS,

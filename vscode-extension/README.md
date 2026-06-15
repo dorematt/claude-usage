@@ -54,7 +54,7 @@ Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 | Command | What it does |
 |---|---|
 | **Claude Usage: Open Dashboard** | Reveal the sidebar and start the server (also fires automatically when you click the activity-bar icon) |
-| **Claude Usage: Rescan Transcripts** | Refresh the iframe; the dashboard's own Rescan button triggers a full DB rebuild |
+| **Claude Usage: Rescan Transcripts** | Refresh the iframe; the dashboard's own Rescan button runs an incremental scan that adds new usage without touching existing history |
 | **Claude Usage: Restart Server** | Kill and respawn the Python process (use after changing settings) |
 | **Claude Usage: Show Logs** | Open the extension's output channel — useful when something doesn't work |
 
