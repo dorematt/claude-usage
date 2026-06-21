@@ -250,6 +250,7 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     --red: #C74E39;
     --raised: #2E2F31;  /* hover / raised surfaces — top of the elevation ladder */
     --selected: #262626;  /* selected chips / tabs (neutral, not accent) */
+    --jump-h: 45px;  /* sticky jump-bar height; JS keeps it in sync for scroll offsets */
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; }
@@ -306,11 +307,14 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .model-cb-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .filter-btn { padding: 3px 10px; border-radius: 4px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-size: 11px; cursor: pointer; white-space: nowrap; }
   .filter-btn:hover { border-color: var(--accent); color: var(--text); }
-  .range-group { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; flex-shrink: 0; }
-  .range-btn { padding: 4px 13px; background: transparent; border: none; border-right: 1px solid var(--border); color: var(--muted); font-size: 12px; cursor: pointer; transition: background 0.15s, color 0.15s; }
-  .range-btn:last-child { border-right: none; }
-  .range-btn:hover { background: var(--raised); color: var(--text); }
-  .range-btn.active { background: var(--selected); color: var(--text); font-weight: 600; }
+  /* Date range — a compact dropdown. The old segmented button row (8 buttons)
+     wrapped badly in the narrow VS Code panel; a single select stays put. Styled
+     to match the model trigger. */
+  .range-select { position: relative; flex-shrink: 0; }
+  .range-select select { appearance: none; -webkit-appearance: none; min-width: 150px; padding: 5px 30px 5px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 12px; cursor: pointer; transition: border-color 0.15s; }
+  .range-select select:hover, .range-select select:focus { border-color: var(--accent); outline: none; }
+  .range-select::after { content: "\25BE"; position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 10px; pointer-events: none; }
+  .range-select option { background: var(--card); color: var(--text); }
 
   .container { max-width: 1400px; margin: 0 auto; padding: 24px; }
   .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
@@ -375,6 +379,54 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   .footer-content a:hover { text-decoration: underline; }
   .footer-content a.update-link { color: var(--accent); font-weight: 600; }
 
+  /* Jump bar — a sticky table-of-contents for a long report. Styled as a sibling
+     of the filter bar (same card surface + bottom border) so it reads as part of
+     the same control strip. It pins to the viewport top once the header/filter
+     scroll away. z-index sits below the model panel (50) so the dropdown still
+     overlays it. */
+  /* Sticky table-of-contents for the long report: three compact entries —
+     Overview, plus Graphs and Tables menus that reveal their sections on hover
+     (or keyboard focus). Stays small so it never crowds the narrow VS Code panel. */
+  #jump-bar { position: sticky; top: 0; z-index: 20; background: var(--card); border-bottom: 1px solid var(--border); padding: 7px 24px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; box-shadow: 0 2px 8px rgba(0,0,0,0.18); }
+  .jump-menu { position: relative; }
+  .jump-trigger { display: inline-flex; align-items: center; gap: 6px; padding: 3px 11px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; transition: background 0.12s, color 0.12s, border-color 0.12s; }
+  .jump-trigger svg { display: block; }
+  .jump-caret { font-size: 9px; }
+  .jump-trigger:hover, .jump-menu:focus-within .jump-trigger { color: var(--text); background: var(--raised); }
+  .jump-trigger.active { color: var(--text); border-color: var(--border); }
+  .jump-panel { position: absolute; top: calc(100% + 5px); left: 0; z-index: 50; min-width: 160px; display: none; flex-direction: column; gap: 2px; padding: 6px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.35); }
+  /* Invisible bridge over the 5px gap so the menu doesn't close as the pointer
+     travels from the trigger down to the panel. */
+  .jump-panel::before { content: ""; position: absolute; left: 0; right: 0; top: -8px; height: 8px; }
+  .jump-menu-end .jump-panel { left: auto; right: 0; }
+  .jump-menu:hover .jump-panel, .jump-menu:focus-within .jump-panel { display: flex; }
+  .jump-link { padding: 3px 11px; border-radius: 6px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 12px; cursor: pointer; white-space: nowrap; transition: background 0.12s, color 0.12s, border-color 0.12s; }
+  .jump-panel .jump-link { display: block; width: 100%; text-align: left; padding: 5px 10px; }
+  .jump-link:hover { color: var(--text); background: var(--raised); }
+  .jump-link.active { color: var(--text); background: var(--selected); border-color: var(--border); font-weight: 600; }
+  /* Inline info affordance (e.g. the dispatches table) — native title tooltip. */
+  .info-icon { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 3px; color: var(--muted); cursor: help; }
+  .info-icon svg { display: block; }
+  .info-icon:hover { color: var(--text); }
+  /* Anchored sections clear the sticky bar when jumped/collapsed to. */
+  .stats-row, .chart-card, .table-card { scroll-margin-top: calc(var(--jump-h) + 14px); }
+
+  /* Collapsible cards — a full section fold, independent of in-table Show
+     more/less (which only pages rows). Collapsing hides the card body and its
+     header controls, leaving just the caret + title. State persists per card in
+     localStorage. */
+  .card-caret { display: inline-block; width: 0.9em; margin-right: 7px; font-size: 14px; line-height: 1; color: inherit; transform: rotate(90deg); transition: transform 0.15s; }
+  .collapsed .card-caret { transform: rotate(0deg); }
+  .chart-card > h2, .chart-header > h2, .section-title { cursor: pointer; user-select: none; }
+  .chart-card > h2:hover, .chart-header > h2:hover, .section-title:hover { color: var(--text); }
+  .jump-link:focus-visible, .jump-trigger:focus-visible, .info-icon:focus-visible, .chart-card > h2:focus-visible, .chart-header > h2:focus-visible, .section-title:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .chart-card.collapsed > h2, .chart-card.collapsed > .chart-header { margin-bottom: 0; }
+  .table-card.collapsed > .section-title, .table-card.collapsed > .section-header { margin-bottom: 0; }
+  .chart-card.collapsed > *:not(h2):not(.chart-header),
+  .chart-card.collapsed .chart-header > *:not(h2),
+  .table-card.collapsed > *:not(.section-title):not(.section-header),
+  .table-card.collapsed .section-header > *:not(.section-title) { display: none; }
+
   @media (max-width: 768px) { .charts-grid { grid-template-columns: 1fr; } .chart-card.wide { grid-column: 1; } }
 </style>
 </head>
@@ -405,28 +457,60 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
   </div>
   <div class="filter-sep"></div>
   <div class="filter-label">Range</div>
-  <div class="range-group">
-    <button class="range-btn" data-range="today" onclick="setRange('today')">Today</button>
-    <button class="range-btn" data-range="week" onclick="setRange('week')">This Week</button>
-    <button class="range-btn" data-range="month" onclick="setRange('month')">This Month</button>
-    <button class="range-btn" data-range="prev-month" onclick="setRange('prev-month')">Prev Month</button>
-    <button class="range-btn" data-range="7d"  onclick="setRange('7d')">7d</button>
-    <button class="range-btn" data-range="30d" onclick="setRange('30d')">30d</button>
-    <button class="range-btn" data-range="90d" onclick="setRange('90d')">90d</button>
-    <button class="range-btn" data-range="all" onclick="setRange('all')">All</button>
+  <div class="range-select">
+    <select id="range-select" aria-label="Date range" onchange="setRange(this.value)">
+      <option value="today">Today</option>
+      <option value="week">This Week</option>
+      <option value="month">This Month</option>
+      <option value="prev-month">Previous Month</option>
+      <option value="7d">Last 7 Days</option>
+      <option value="30d">Last 30 Days</option>
+      <option value="90d">Last 90 Days</option>
+      <option value="all">All Time</option>
+    </select>
   </div>
 </div>
+
+<nav id="jump-bar" aria-label="Jump to section">
+  <button class="jump-link" data-target="stats-row">Overview</button>
+  <div class="jump-menu">
+    <button type="button" class="jump-trigger" aria-haspopup="true" aria-expanded="false">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M8 17v-4"/><path d="M13 17V8"/><path d="M18 17v-7"/></svg>
+      Graphs <span class="jump-caret">&#9662;</span>
+    </button>
+    <div class="jump-panel">
+      <button class="jump-link" data-target="sec-daily">Daily</button>
+      <button class="jump-link" data-target="sec-hourly">Distribution</button>
+      <button class="jump-link" data-target="sec-models">By Model</button>
+      <button class="jump-link" data-target="sec-projects">Top Projects</button>
+      <button class="jump-link" data-target="sec-subagents">Subagents</button>
+    </div>
+  </div>
+  <div class="jump-menu jump-menu-end">
+    <button type="button" class="jump-trigger" aria-haspopup="true" aria-expanded="false">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/></svg>
+      Tables <span class="jump-caret">&#9662;</span>
+    </button>
+    <div class="jump-panel">
+      <button class="jump-link" data-target="sec-cost-model">Cost by Model</button>
+      <button class="jump-link" data-target="sec-dispatches">Dispatches</button>
+      <button class="jump-link" data-target="sec-sessions">Sessions</button>
+      <button class="jump-link" data-target="sec-cost-project">Cost by Project</button>
+      <button class="jump-link" data-target="sec-cost-branch">Cost by Project &amp; Branch</button>
+    </div>
+  </div>
+</nav>
 
 <div class="container">
   <div class="stats-row" id="stats-row"></div>
   <div class="charts-grid">
-    <div class="chart-card wide">
-      <h2 id="daily-chart-title">Daily Token Usage</h2>
+    <div class="chart-card wide" id="sec-daily" data-card="daily">
+      <h2><span class="card-caret">&#9656;</span><span id="daily-chart-title">Daily Token Usage</span></h2>
       <div class="chart-wrap tall"><canvas id="chart-daily"></canvas></div>
     </div>
-    <div class="chart-card wide">
+    <div class="chart-card wide" id="sec-hourly" data-card="hourly">
       <div class="chart-header">
-        <h2 id="hourly-chart-title">Average Hourly Distribution</h2>
+        <h2><span class="card-caret">&#9656;</span><span id="hourly-chart-title">Average Hourly Distribution</span></h2>
         <div class="chart-header-right">
           <span class="peak-legend" title="Mon–Fri 05:00–11:00 PT — Anthropic peak-hour throttling window"><span class="peak-swatch"></span>Peak hours (PT)</span>
           <span class="chart-day-count" id="hourly-day-count"></span>
@@ -438,21 +522,21 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
       </div>
       <div class="chart-wrap"><canvas id="chart-hourly"></canvas></div>
     </div>
-    <div class="chart-card">
-      <h2>By Model</h2>
+    <div class="chart-card" id="sec-models" data-card="model-chart">
+      <h2><span class="card-caret">&#9656;</span>By Model</h2>
       <div class="chart-wrap"><canvas id="chart-model"></canvas></div>
     </div>
-    <div class="chart-card">
-      <h2>Top Projects by Tokens</h2>
+    <div class="chart-card" id="sec-projects" data-card="project-chart">
+      <h2><span class="card-caret">&#9656;</span>Top Projects by Tokens</h2>
       <div class="chart-wrap"><canvas id="chart-project"></canvas></div>
     </div>
-    <div class="chart-card wide">
-      <h2 id="subagent-chart-title">Subagent Tokens by Type</h2>
+    <div class="chart-card wide" id="sec-subagents" data-card="subagent-chart">
+      <h2><span class="card-caret">&#9656;</span><span id="subagent-chart-title">Subagent Tokens by Type</span></h2>
       <div class="chart-wrap"><canvas id="chart-subagent"></canvas></div>
     </div>
   </div>
-  <div class="table-card">
-    <div class="section-title">Cost by Model</div>
+  <div class="table-card" id="sec-cost-model" data-card="cost-by-model">
+    <div class="section-title"><span class="card-caret">&#9656;</span>Cost by Model</div>
     <table>
       <thead><tr>
         <th>Model</th>
@@ -467,8 +551,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </table>
     <div class="table-foot" id="model-cost-foot"></div>
   </div>
-  <div class="table-card">
-    <div class="section-header"><div class="section-title">Top Subagent Dispatches <span class="muted" style="font-weight:400;text-transform:none;letter-spacing:0;font-size:11px">&middot; ranked by total tokens; <em>unknown</em> = parent dispatch record not found</span></div><button class="export-btn" onclick="exportDispatchesCSV()" title="Export all filtered subagent dispatches to CSV">&#x2913; CSV</button></div>
+  <div class="table-card" id="sec-dispatches" data-card="dispatches">
+    <div class="section-header"><div class="section-title"><span class="card-caret">&#9656;</span>Top Subagent Dispatches <span class="info-icon" tabindex="0" role="img" aria-label="About this table" title="Ranked by total tokens. &quot;unknown&quot; means the parent dispatch record wasn't found."><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg></span></div><button class="export-btn" onclick="exportDispatchesCSV()" title="Export all filtered subagent dispatches to CSV">&#x2913; CSV</button></div>
     <table>
       <thead><tr>
         <th>Type</th><th>Started</th><th>Model</th><th>Turns</th><th>Tool Uses</th>
@@ -478,8 +562,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </table>
     <div class="table-foot" id="dispatches-foot"></div>
   </div>
-  <div class="table-card">
-    <div class="section-header"><div class="section-title">Recent Sessions</div><button class="export-btn" onclick="exportSessionsCSV()" title="Export all filtered sessions to CSV">&#x2913; CSV</button></div>
+  <div class="table-card" id="sec-sessions" data-card="sessions">
+    <div class="section-header"><div class="section-title"><span class="card-caret">&#9656;</span>Recent Sessions</div><button class="export-btn" onclick="exportSessionsCSV()" title="Export all filtered sessions to CSV">&#x2913; CSV</button></div>
     <table>
       <thead><tr>
         <th>Session</th>
@@ -496,8 +580,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </table>
     <div class="table-foot" id="sessions-foot"></div>
   </div>
-  <div class="table-card">
-    <div class="section-header"><div class="section-title">Cost by Project</div><button class="export-btn" onclick="exportProjectsCSV()" title="Export all projects to CSV">&#x2913; CSV</button></div>
+  <div class="table-card" id="sec-cost-project" data-card="cost-by-project">
+    <div class="section-header"><div class="section-title"><span class="card-caret">&#9656;</span>Cost by Project</div><button class="export-btn" onclick="exportProjectsCSV()" title="Export all projects to CSV">&#x2913; CSV</button></div>
     <table>
       <thead><tr>
         <th>Project</th>
@@ -511,8 +595,8 @@ HTML_TEMPLATE = r"""<!DOCTYPE html>
     </table>
     <div class="table-foot" id="project-cost-foot"></div>
   </div>
-  <div class="table-card">
-    <div class="section-header"><div class="section-title">Cost by Project &amp; Branch</div><button class="export-btn" onclick="exportProjectBranchCSV()" title="Export project+branch breakdown to CSV">&#x2913; CSV</button></div>
+  <div class="table-card" id="sec-cost-branch" data-card="cost-by-branch">
+    <div class="section-header"><div class="section-title"><span class="card-caret">&#9656;</span>Cost by Project &amp; Branch</div><button class="export-btn" onclick="exportProjectBranchCSV()" title="Export project+branch breakdown to CSV">&#x2913; CSV</button></div>
     <table>
       <thead><tr>
         <th>Project</th>
@@ -579,11 +663,20 @@ let sessionSortDir = 'desc';
 // always reflect the active sort).
 const TABLE_STEPS = [10, 25, 50];
 const TABLE_MAX = TABLE_STEPS[TABLE_STEPS.length - 1];  // hard cap on in-table rows
+// Don't paginate a table that barely exceeds the first step — paging away one or
+// two rows just to show a "Show more" button is more annoying than helpful. Below
+// this many rows a table always renders in full (no toggle).
+const PAGINATE_THRESHOLD = 12;
 function nextTableLimit(current, total) {
   for (const s of TABLE_STEPS) {
     if (s > current && s < total) return s;
   }
   return Math.min(total, TABLE_MAX);  // reveal everything, but never past the cap
+}
+// Rows to actually show: everything when the table is small enough to skip
+// paging, otherwise the user's current step.
+function shownCount(limit, total) {
+  return total <= PAGINATE_THRESHOLD ? total : limit;
 }
 let modelLimit = TABLE_STEPS[0];
 let sessionsLimit = TABLE_STEPS[0];
@@ -832,9 +925,8 @@ function readURLRange() {
 
 function setRange(range) {
   selectedRange = range;
-  document.querySelectorAll('.range-btn').forEach(btn =>
-    btn.classList.toggle('active', btn.dataset.range === range)
-  );
+  const sel = document.getElementById('range-select');
+  if (sel) sel.value = range;  // keep the dropdown in sync with programmatic calls
   updateURL();
   applyFilter();
   scheduleAutoRefresh();
@@ -1465,7 +1557,7 @@ function renderTopDispatches(rows) {
     renderTableToggle('dispatches-foot', 0, dispatchesLimit, 'lessDispatchRows', 'moreDispatchRows', 'exportDispatchesCSV');
     return;
   }
-  const shown = rows.slice(0, dispatchesLimit);
+  const shown = rows.slice(0, shownCount(dispatchesLimit, rows.length));
   body.innerHTML = shown.map(d => {
     const tokensTotal = d.input + d.output + d.cache_read + d.cache_creation;
     const cost = calcCost(d.model, d.input, d.output, d.cache_read, d.cache_creation);
@@ -1501,7 +1593,7 @@ function renderTopDispatches(rows) {
 function renderTableToggle(footId, total, limit, lessName, moreName, csvName) {
   const foot = document.getElementById(footId);
   if (!foot) return;
-  if (total <= TABLE_STEPS[0]) { foot.innerHTML = ''; return; }
+  if (total <= PAGINATE_THRESHOLD) { foot.innerHTML = ''; return; }
   const less = '<button class="show-more-btn" onclick="' + lessName + '()">Show less ▴</button>';
   const more = '<button class="show-more-btn" onclick="' + moreName + '()">Show more ▾</button>';
   let html;
@@ -1523,8 +1615,8 @@ function scrollTableToTop(bodyId) {
   if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-// "Show more" advances one step (capped at TABLE_MAX); "Show less" resets to 10
-// and scrolls back to the top of that table.
+// "Show more" advances one step (capped at TABLE_MAX); "Show less" resets to the
+// first step and scrolls back to the top of that table.
 function moreModelRows()   { modelLimit    = nextTableLimit(modelLimit,    lastByModel.length);        renderModelCostTable(lastByModel); }
 function lessModelRows()   { modelLimit    = TABLE_STEPS[0]; renderModelCostTable(lastByModel);            scrollTableToTop('model-cost-body'); }
 function moreSessionRows() { sessionsLimit = nextTableLimit(sessionsLimit, lastFilteredSessions.length); renderSessionsTable(lastFilteredSessions); }
@@ -1537,7 +1629,7 @@ function moreDispatchRows(){ dispatchesLimit = nextTableLimit(dispatchesLimit, l
 function lessDispatchRows(){ dispatchesLimit = TABLE_STEPS[0]; renderTopDispatches(lastFilteredDispatches);            scrollTableToTop('dispatches-body'); }
 
 function renderSessionsTable(sessions) {
-  const shown = sessions.slice(0, sessionsLimit);
+  const shown = sessions.slice(0, shownCount(sessionsLimit, sessions.length));
   document.getElementById('sessions-body').innerHTML = shown.map(s => {
     const cost = calcCost(s.model, s.input, s.output, s.cache_read, s.cache_creation);
     const costCell = isBillable(s.model)
@@ -1593,7 +1685,7 @@ function sortModels(byModel) {
 
 function renderModelCostTable(byModel) {
   const sorted = sortModels(byModel);
-  const shown = sorted.slice(0, modelLimit);
+  const shown = sorted.slice(0, shownCount(modelLimit, sorted.length));
   document.getElementById('model-cost-body').innerHTML = shown.map(m => {
     const cost = calcCost(m.model, m.input, m.output, m.cache_read, m.cache_creation);
     const costCell = isBillable(m.model)
@@ -1642,7 +1734,7 @@ function sortProjects(byProject) {
 
 function renderProjectCostTable(byProject) {
   const sorted = sortProjects(byProject);
-  const shown = sorted.slice(0, projectLimit);
+  const shown = sorted.slice(0, shownCount(projectLimit, sorted.length));
   document.getElementById('project-cost-body').innerHTML = shown.map(p => {
     return `<tr>
       <td>${esc(p.project)}</td>
@@ -1692,7 +1784,7 @@ function sortProjectBranch(rows) {
 
 function renderProjectBranchCostTable(rows) {
   const sorted = sortProjectBranch(rows);
-  const shown = sorted.slice(0, branchLimit);
+  const shown = sorted.slice(0, shownCount(branchLimit, sorted.length));
   document.getElementById('project-branch-cost-body').innerHTML = shown.map(pb => {
     return `<tr>
       <td>${esc(pb.project)}</td>
@@ -1820,11 +1912,10 @@ async function loadData() {
     rawData = d;
 
     if (isFirstLoad) {
-      // Restore range from URL, mark active button
+      // Restore range from URL into the dropdown
       selectedRange = readURLRange();
-      document.querySelectorAll('.range-btn').forEach(btn =>
-        btn.classList.toggle('active', btn.dataset.range === selectedRange)
-      );
+      const rangeSel = document.getElementById('range-select');
+      if (rangeSel) rangeSel.value = selectedRange;
       // Mark default TZ button active
       document.querySelectorAll('.tz-btn').forEach(btn =>
         btn.classList.toggle('active', btn.dataset.tz === hourlyTZ)
@@ -1926,7 +2017,145 @@ function initFooterMeta() {
   if (v && APP_CONFIG.surface !== 'vscode') checkForUpdate(v);
 }
 
+// ── Section nav + collapsible cards ─────────────────────────────────────────
+// The dashboard is one long scroll. The sticky jump bar teleports between
+// sections; collapsible cards fold away the ones you don't use. Collapse state
+// persists per card in localStorage and is independent of in-table Show
+// more/less (which only pages rows within a single table).
+const COLLAPSE_KEY = 'cu_collapsed_cards';
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function loadCollapsedSet() {
+  try { return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]')); }
+  catch (e) { return new Set(); }
+}
+function saveCollapsedSet(set) {
+  try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...set])); } catch (e) {}
+}
+
+// Charts created while their card is collapsed (display:none) lay out at zero
+// size; resize them once the card is shown again so Chart.js repaints to fit.
+function resizeChartsIn(card) {
+  card.querySelectorAll('canvas').forEach(cv => {
+    const ch = Object.values(charts).find(c => c && c.canvas === cv);
+    if (ch) ch.resize();
+  });
+}
+
+function setCardCollapsed(card, collapsed) {
+  card.classList.toggle('collapsed', collapsed);
+  const title = card.querySelector('h2, .section-title');
+  if (title) title.setAttribute('aria-expanded', String(!collapsed));
+}
+
+function toggleCard(card) {
+  const collapsed = !card.classList.contains('collapsed');
+  setCardCollapsed(card, collapsed);
+  const set = loadCollapsedSet();
+  if (collapsed) set.add(card.dataset.card); else set.delete(card.dataset.card);
+  saveCollapsedSet(set);
+  if (!collapsed) requestAnimationFrame(() => resizeChartsIn(card));
+}
+
+function jumpToSection(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  if (el.dataset.card && el.classList.contains('collapsed')) toggleCard(el);  // expand before scrolling
+  el.scrollIntoView({ behavior: prefersReducedMotion ? 'auto' : 'smooth', block: 'start' });
+}
+
+function initSectionNav() {
+  const bar = document.getElementById('jump-bar');
+  const container = document.querySelector('.container');
+  if (!container) return;
+
+  // Keep --jump-h synced to the bar's real height so scroll-margin clears it
+  // even when the links wrap to a second row on a narrow panel.
+  const syncJumpHeight = () => {
+    if (bar) document.documentElement.style.setProperty('--jump-h', bar.offsetHeight + 'px');
+  };
+  syncJumpHeight();
+  window.addEventListener('resize', syncJumpHeight);
+
+  // Restore persisted collapse state + make each title an accessible toggle.
+  const collapsed = loadCollapsedSet();
+  document.querySelectorAll('[data-card]').forEach(card => {
+    const title = card.querySelector('h2, .section-title');
+    if (title) {
+      title.setAttribute('role', 'button');
+      title.setAttribute('tabindex', '0');
+      title.title = 'Collapse / expand section';
+    }
+    setCardCollapsed(card, collapsed.has(card.dataset.card));
+  });
+
+  // Toggle a card from its title (caret included). Inner controls (CSV, TZ, sort
+  // headers) sit outside the title selector, so they keep their own behaviour.
+  const TITLE_SEL = '.chart-card > h2, .chart-header > h2, .table-card > .section-title, .section-header > .section-title';
+  const onTitleActivate = (e) => {
+    if (e.target.closest('.info-icon')) return;  // info tooltip, not a collapse toggle
+    if (e.type === 'keydown') { if (e.key !== 'Enter' && e.key !== ' ') return; e.preventDefault(); }
+    const title = e.target.closest(TITLE_SEL);
+    const card = title && title.closest('[data-card]');
+    if (card) toggleCard(card);
+  };
+  container.addEventListener('click', onTitleActivate);
+  container.addEventListener('keydown', onTitleActivate);
+
+  // Jump links teleport to a section (expanding it first if collapsed). Blur the
+  // clicked item so the hover/focus dropdown it lives in closes after the jump.
+  if (bar) bar.addEventListener('click', (e) => {
+    const link = e.target.closest('.jump-link');
+    if (link) { jumpToSection(link.dataset.target); link.blur(); }
+  });
+
+  // Mirror open/closed state on the menu triggers for assistive tech, and let
+  // Escape close an open menu.
+  document.querySelectorAll('.jump-menu').forEach(menu => {
+    const trig = menu.querySelector('.jump-trigger');
+    const sync = (open) => { if (trig) trig.setAttribute('aria-expanded', String(open)); };
+    // A mouse click must not focus (and thus pin) the trigger — otherwise the
+    // panel stays open after the pointer leaves and fights the next hover. Tab
+    // focus still works (it doesn't go through mousedown), keeping it keyboard-open.
+    if (trig) trig.addEventListener('mousedown', (e) => e.preventDefault());
+    menu.addEventListener('mouseenter', () => sync(true));
+    menu.addEventListener('mouseleave', () => sync(false));
+    menu.addEventListener('focusin', () => sync(true));
+    menu.addEventListener('focusout', () => sync(false));
+    menu.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.activeElement) document.activeElement.blur(); });
+  });
+
+  // Scroll-spy: highlight the link for the topmost section under the bar, and
+  // mark the parent Graphs/Tables trigger so the closed menu shows where you are.
+  const links = [...document.querySelectorAll('.jump-link')];
+  const menus = [...document.querySelectorAll('.jump-menu')];
+  const targets = links.map(l => document.getElementById(l.dataset.target)).filter(Boolean)
+    .sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+  let spyScheduled = false;
+  const updateActive = () => {
+    spyScheduled = false;
+    const line = (bar ? bar.offsetHeight : 45) + 16;
+    let activeId = targets.length ? targets[0].id : null;
+    for (const t of targets) {
+      if (t.getBoundingClientRect().top - line <= 1) activeId = t.id; else break;
+    }
+    // At the very bottom the last (often short) section may never reach the line.
+    if (targets.length && (window.innerHeight + window.scrollY) >= document.body.scrollHeight - 4)
+      activeId = targets[targets.length - 1].id;
+    links.forEach(l => l.classList.toggle('active', l.dataset.target === activeId));
+    menus.forEach(menu => {
+      const trig = menu.querySelector('.jump-trigger');
+      if (trig) trig.classList.toggle('active', !!menu.querySelector('.jump-link.active'));
+    });
+  };
+  window.addEventListener('scroll', () => {
+    if (!spyScheduled) { spyScheduled = true; requestAnimationFrame(updateActive); }
+  }, { passive: true });
+  updateActive();
+}
+
 initFooterMeta();
+initSectionNav();
 loadData();
 scheduleAutoRefresh();
 </script>
