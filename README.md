@@ -60,6 +60,18 @@ cd claude-usage
 python cli.py dashboard
 ```
 
+### Docker
+```
+git clone https://github.com/phuryn/claude-usage
+cd claude-usage
+bash scripts/run-docker.sh
+```
+
+Opens the dashboard at **http://localhost:9898**.
+
+The script builds the image, then runs the container with:
+- `~/.claude` mounted **read-only** — the container can read your transcripts but cannot modify them
+- A named Docker volume (`claude-usage-data`) for the SQLite database — persisted across restarts, isolated from your home directory
 
 ---
 
@@ -107,7 +119,7 @@ Claude Code writes one JSONL file per session to `~/.claude/projects/`. Each lin
 
 `scanner.py` parses those files and stores the data in a SQLite database at `~/.claude/usage.db`.
 
-`dashboard.py` serves a single-page dashboard on `localhost:8080` with Chart.js charts (loaded from CDN). It auto-refreshes every 30 seconds and supports model filtering with bookmarkable URLs. The bind address and port can be overridden with `HOST` and `PORT` environment variables (defaults: `localhost`, `8080`).
+`dashboard.py` serves a single-page dashboard on `localhost:8080` with Chart.js charts (loaded from CDN). It auto-refreshes every 30 seconds and supports model filtering and a date-range dropdown with bookmarkable URLs. A sticky section nav jumps between sections, and every chart/table can be collapsed (remembered across reloads). The bind address and port can be overridden with `HOST` and `PORT` environment variables (defaults: `localhost`, `8080`).
 
 ---
 
@@ -155,3 +167,5 @@ See [vscode-extension/README.md](vscode-extension/README.md) for settings, comma
 | `cli.py` | `scan`, `today`, `stats`, `dashboard` commands |
 | `Formula/claude-usage.rb` | Homebrew formula — install with `brew install --formula <raw-url>` |
 | `vscode-extension/` | VS Code extension — embeds the dashboard inside VS Code |
+| `Dockerfile` | Container image definition |
+| `scripts/run-docker.sh` | Build and run the dashboard in Docker with a read-only `~/.claude` mount |

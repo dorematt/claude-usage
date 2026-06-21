@@ -2,9 +2,17 @@ import * as vscode from "vscode";
 import * as path from "node:path";
 import { locatePython } from "./python-locator";
 import { resolveInstallMode, dashboardSpawnArgs, InstallMode } from "./install-mode";
-import { resolvePort } from "./port-allocator";
+import { resolveStablePort } from "./port-allocator";
 import { ServerManager, OutputSink } from "./server-manager";
 import { DashboardSidebar } from "./sidebar";
+
+/**
+ * workspaceState key holding the last port the dashboard bound to. Reused on the
+ * next launch so the iframe origin (and thus its localStorage: collapsed-section
+ * state + the update-check cache) survives window reloads. Per-workspace so two
+ * windows don't fight over one port.
+ */
+const LAST_PORT_KEY = "claudeUsage.lastPort";
 
 /**
  * Lifecycle owner for the extension. Held as a module-level singleton so
@@ -106,7 +114,12 @@ class Extension {
       return;
     }
 
-    const port = await resolvePort(configuredPort, host);
+    // Reuse the last port when it's still free so the embedded dashboard's
+    // localStorage (which is keyed by the iframe's http://host:port origin)
+    // persists across window reloads instead of resetting every launch.
+    const savedPort = this.context.workspaceState.get<number>(LAST_PORT_KEY);
+    const port = await resolveStablePort(configuredPort, savedPort, host);
+    void this.context.workspaceState.update(LAST_PORT_KEY, port);
     const url = `http://${host}:${port}/`;
     // Probe a dashboard-specific endpoint so we don't get fooled by some
     // other localhost service listening on the same port.

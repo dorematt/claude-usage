@@ -431,10 +431,10 @@ class TestHTMLTemplate(unittest.TestCase):
         self.assertIn('PEAK_HOURS_UTC', HTML_TEMPLATE)
         self.assertIn('[12, 13, 14, 15, 16, 17]', HTML_TEMPLATE)
 
-    def test_today_range_button_present(self):
-        """The 'Today' range button is wired into RANGE_LABELS, RANGE_TICKS,
-        getRangeBounds, and the filter-bar HTML."""
-        self.assertIn("data-range=\"today\"", HTML_TEMPLATE)
+    def test_today_range_option_present(self):
+        """The 'Today' range is wired into RANGE_LABELS, RANGE_TICKS,
+        getRangeBounds, and the filter-bar range dropdown."""
+        self.assertIn("<option value=\"today\">", HTML_TEMPLATE)
         self.assertIn("'today': 'Today'", HTML_TEMPLATE)
         self.assertIn("'today': 1", HTML_TEMPLATE)
         # Bounds case: today returns start === end === today's ISO date

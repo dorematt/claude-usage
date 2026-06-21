@@ -1,6 +1,20 @@
 import { describe, it, expect } from "vitest";
 import * as net from "node:net";
-import { pickFreePort, normalizeConfiguredPort, resolvePort } from "../src/port-allocator";
+import { pickFreePort, normalizeConfiguredPort, resolvePort, isPortFree, resolveStablePort } from "../src/port-allocator";
+
+/** Bind a server to a port and hold it open for the duration of `fn`. */
+async function withPortHeld<T>(port: number, fn: () => Promise<T>, host = "127.0.0.1"): Promise<T> {
+  const server = net.createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, host, () => resolve());
+  });
+  try {
+    return await fn();
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+}
 
 describe("normalizeConfiguredPort", () => {
   it("zero maps to auto", () => {
@@ -73,5 +87,51 @@ describe("resolvePort", () => {
   it("auto-picks when configured is out of range", async () => {
     const port = await resolvePort(80);
     expect(port).toBeGreaterThan(1024);
+  });
+});
+
+describe("isPortFree", () => {
+  it("true for a port nothing is bound to", async () => {
+    const port = await pickFreePort();
+    expect(await isPortFree(port)).toBe(true);
+  });
+
+  it("false while a port is held", async () => {
+    const port = await pickFreePort();
+    await withPortHeld(port, async () => {
+      expect(await isPortFree(port)).toBe(false);
+    });
+  });
+});
+
+describe("resolveStablePort", () => {
+  it("returns the configured port as-is when pinned (ignores saved)", async () => {
+    const pinned = await pickFreePort();
+    const saved = await pickFreePort();
+    expect(await resolveStablePort(pinned, saved)).toBe(pinned);
+  });
+
+  it("reuses the saved port when it is still free", async () => {
+    const saved = await pickFreePort();
+    expect(await resolveStablePort(0, saved)).toBe(saved);
+  });
+
+  it("picks a fresh port when the saved one is taken", async () => {
+    const saved = await pickFreePort();
+    await withPortHeld(saved, async () => {
+      const got = await resolveStablePort(0, saved);
+      expect(got).not.toBe(saved);
+      expect(got).toBeGreaterThan(1024);
+    });
+  });
+
+  it("picks a fresh port when there is no saved port", async () => {
+    const got = await resolveStablePort(0, undefined);
+    expect(got).toBeGreaterThan(1024);
+  });
+
+  it("ignores an out-of-range saved port", async () => {
+    const got = await resolveStablePort(0, 80);
+    expect(got).toBeGreaterThan(1024);
   });
 });

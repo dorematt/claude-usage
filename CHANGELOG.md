@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.5.0 — 2026-06-21
+
+### Dashboard
+
+- Added a sticky **section nav** under the filters that teleports to any section and highlights where you currently are — much faster to navigate the long single-page report. It's three compact entries: **Overview**, plus **Graphs** and **Tables** menus that drop down their sections on hover (or keyboard focus).
+- Made every chart and table card **collapsible**: click its title to fold the whole section away (independent of the in-table Show more/less paging). Collapsed sections are remembered across reloads, so you can permanently hide the views you don't use.
+- Reworked table paging so small tables aren't paged pointlessly: a table with **12 rows or fewer now shows in full** (no "Show more" to reveal just a row or two). Larger tables start at 10 rows and page **10 → 25 → 50**, with **Show less** collapsing back to 10.
+- Replaced the date-range button row with a compact **dropdown** — the eight buttons wrapped badly in the narrow VS Code panel.
+- Fixed the embedded VS Code panel **losing its saved state on reload** (collapsed sections, the update-check cache): the extension now reuses the dashboard's port across launches when it's free, so the iframe's localStorage origin stays stable instead of changing every time.
+- Added subagent attribution views: a **Subagent Tokens by Type** stacked bar chart and a **Top Subagent Dispatches** table, plus a Subagent Tokens stat card. Dispatched Task/Agent subagents (and Claude Code's auto-compaction) are surfaced separately while remaining included in the overall totals; both respect the existing model + range filters. All dynamic values are escaped via `esc()` (#140, thanks @john988).
+- The **Top Subagent Dispatches** table now behaves like Recent Sessions: it pages with Show more / Show less and exports all filtered rows to CSV, and it was moved below the Cost by Model table. The full ranked set is now sent to the client (previously capped at 50 server-side). Its header explanation ("ranked by total tokens; unknown = …") was moved into a small **(i) tooltip** to declutter the title.
+- Fixed **Cost by Project & Branch** default ordering: it now sorts by cost (descending) like the other cost tables, instead of grouping alphabetically by project name. Project name is kept only as a tiebreaker, and column sorting now matches the sibling tables.
+- Fixed a crash on `/api/data` (`no such table: agents`) that could appear on the first dashboard load right after upgrading — the server serves before its background scan migrates the DB, so `get_dashboard_data` now migrates the schema on read (idempotent) before running the subagent queries.
+
+### Scanner / CLI
+
+- The scanner now attributes subagent usage: new `turns.is_subagent` / `turns.agent_id` columns and an `agents` dispatch table (additive, in-place migrations — existing DBs upgrade without a rebuild). Subagents are detected via `isSidechain` / `agentId` / a `subagents/` transcript path, and dispatch metadata (agent type, status, duration, tool-use count) is captured from the parent tool result (#140, thanks @john988).
+- `today` and `stats` now print subagent token + turn summaries (counted as a subset of the totals, not added on top) (#140, thanks @john988).
+
+### Packaging / docs
+
+- Added Docker support: a `Dockerfile` and `scripts/run-docker.sh` run the dashboard in a container with `~/.claude` mounted **read-only** and the SQLite DB in a named volume, isolated from your home directory. A new `CLAUDE_USAGE_DB` env var makes the DB path configurable at runtime (default unchanged: `~/.claude/usage.db`) (#143, thanks @RafikFarhad).
+
 ## v1.4.0 — 2026-06-15
 
 ### Dashboard

@@ -84,6 +84,8 @@ Pricing is duplicated in two places that **must stay in sync**:
 
 The entire UI lives in `HTML_TEMPLATE` as a raw string. Chart.js is loaded from CDN.
 
+Client-side UI state (collapsed sections, the 24h update-check cache) is kept in **`localStorage`**, which is keyed by the page's origin. In the VS Code extension the dashboard is embedded as an **iframe at `http://127.0.0.1:<port>/`**, so that state only survives a window reload if the port is stable. The extension therefore remembers the last port in `workspaceState` and reuses it when it's still free (`resolveStablePort` in [vscode-extension/src/port-allocator.ts](vscode-extension/src/port-allocator.ts)) — don't revert that to a fresh `pickFreePort` every launch, or the panel silently loses its state each reload.
+
 ## Testing notes
 
 - `tests/test_scanner.py` and `tests/test_dashboard.py` use `tempfile.NamedTemporaryFile` for an isolated DB; never touch the user's real `~/.claude/usage.db`.

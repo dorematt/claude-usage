@@ -45,3 +45,42 @@ export async function resolvePort(configured: number | undefined | null, host = 
   if (c !== 0) return c;
   return pickFreePort(host);
 }
+
+/**
+ * True if `port` can be bound on `host` right now — used to decide whether a
+ * previously-used port is still available to reuse (see resolveStablePort).
+ */
+export function isPortFree(port: number, host = "127.0.0.1"): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.once("error", () => resolve(false));
+    server.listen(port, host, () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+/**
+ * Resolve a port that stays stable across launches when possible.
+ *
+ * The dashboard is embedded as an iframe at http://<host>:<port>/, and the
+ * webview's localStorage (collapsed-section state, the update-check cache) is
+ * keyed by that origin — so a brand-new port on every launch silently wipes it.
+ * When the port is auto-assigned (configured 0) we therefore reuse `saved` if
+ * it's still free, only picking a fresh one when it isn't. A user-pinned port is
+ * already stable, so it's returned as-is.
+ *
+ * Returns the chosen port; the caller is expected to persist it for next time.
+ */
+export async function resolveStablePort(
+  configured: number | undefined | null,
+  saved: number | undefined | null,
+  host = "127.0.0.1",
+): Promise<number> {
+  const c = normalizeConfiguredPort(configured);
+  if (c !== 0) return c;
+  const s = normalizeConfiguredPort(saved);
+  if (s !== 0 && (await isPortFree(s, host))) return s;
+  return pickFreePort(host);
+}
