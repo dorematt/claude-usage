@@ -24,6 +24,7 @@ export function renderHtml(
   nonce: string,
   iconUri = "",
   cspSource = "",
+  showRetry = false,
 ): string {
   if (url) {
     return `<!DOCTYPE html>
@@ -70,8 +71,8 @@ export function renderHtml(
 <body>
 <div class="brand">${logo}<h1>Claude Code Usage</h1></div>
 <p>${escapeHtml(statusText) || "The dashboard server is not running yet."}</p>
-<p><a class="retry" href="command:claudeUsage.open">&#8635; Retry</a></p>
-<p class="hint">Or run <code>Claude Usage: Open Dashboard</code> from the command palette.</p>
+${showRetry ? `<p><a class="retry" href="command:claudeUsage.open">&#8635; Retry</a></p>` : ""}
+<p class="hint">Run <code>Claude Usage: Open Dashboard</code> from the command palette.</p>
 </body>
 </html>`;
 }
@@ -104,6 +105,9 @@ export class DashboardSidebar implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private currentUrl: string | null = null;
   private statusText = "";
+  // Only true after a start attempt actually failed — gates the Retry button so
+  // it doesn't show during the normal "starting…" / not-yet-run states.
+  private failed = false;
   private readonly onShow: () => void;
   private readonly extensionUri: vscode.Uri | undefined;
   private iconUri = "";
@@ -145,8 +149,17 @@ export class DashboardSidebar implements vscode.WebviewViewProvider {
     this.render();
   }
 
+  /** Non-error status (initial / "starting…"): no Retry button. */
   setStatus(text: string): void {
     this.statusText = text;
+    this.failed = false;
+    this.render();
+  }
+
+  /** A start attempt failed: show the status plus a Retry button. */
+  setError(text: string): void {
+    this.statusText = text;
+    this.failed = true;
     this.render();
   }
 
@@ -159,7 +172,7 @@ export class DashboardSidebar implements vscode.WebviewViewProvider {
 
   private render(): void {
     if (!this.view) return;
-    this.view.webview.html = renderHtml(this.currentUrl, this.statusText, makeNonce(), this.iconUri, this.cspSource);
+    this.view.webview.html = renderHtml(this.currentUrl, this.statusText, makeNonce(), this.iconUri, this.cspSource, this.failed);
   }
 }
 

@@ -158,7 +158,7 @@ class Extension {
     } catch (err) {
       const msg = `Failed to start dashboard: ${(err as Error).message}`;
       this.output.appendLine(msg);
-      this.sidebar.setStatus(msg);
+      this.sidebar.setError(msg);
       manager.dispose();
       if (this.server === manager) this.server = undefined;
       // Offer a one-click retry (and log access) rather than making the user
