@@ -73,6 +73,34 @@ def _make_user_record(session_id="sess-1", timestamp="2026-04-08T09:59:00Z",
     })
 
 
+def _make_user_record_with_text(session_id="sess-1", text="Please fix the bug",
+                                timestamp="2026-04-08T09:59:00Z",
+                                cwd="/home/user/project"):
+    return json.dumps({
+        "type": "user",
+        "sessionId": session_id,
+        "timestamp": timestamp,
+        "cwd": cwd,
+        "message": {"content": [{"type": "text", "text": text}]},
+    })
+
+
+def _make_custom_title_record(session_id="sess-1", title="Custom Topic"):
+    return json.dumps({
+        "type": "custom-title",
+        "sessionId": session_id,
+        "customTitle": title,
+    })
+
+
+def _make_ai_title_record(session_id="sess-1", title="AI Topic"):
+    return json.dumps({
+        "type": "ai-title",
+        "sessionId": session_id,
+        "aiTitle": title,
+    })
+
+
 class TestParseJsonlFile(unittest.TestCase):
     def setUp(self):
         self.tmpdir = tempfile.mkdtemp()
@@ -673,6 +701,155 @@ class TestParseJsonlFileLineCount(unittest.TestCase):
             pass
         _, _, _, line_count = parse_jsonl_file(path)
         self.assertEqual(line_count, 0)
+
+
+class TestSessionTopic(unittest.TestCase):
+    """Topic extraction from custom-title / ai-title records (#147)."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+
+    def _write_jsonl(self, lines):
+        path = os.path.join(self.tmpdir, "t.jsonl")
+        with open(path, "w") as f:
+            for line in lines:
+                f.write(line + "\n")
+        return path
+
+    def test_custom_title_sets_topic(self):
+        path = self._write_jsonl([
+            _make_user_record(),
+            _make_assistant_record(),
+            _make_custom_title_record(title="Ship the release"),
+        ])
+        metas, _, _, _ = parse_jsonl_file(path)
+        self.assertEqual(metas[0]["topic"], "Ship the release")
+
+    def test_ai_title_used_when_no_custom(self):
+        path = self._write_jsonl([
+            _make_assistant_record(),
+            _make_ai_title_record(title="Debug the crash"),
+        ])
+        metas, _, _, _ = parse_jsonl_file(path)
+        self.assertEqual(metas[0]["topic"], "Debug the crash")
+
+    def test_custom_title_wins_when_it_comes_after_ai_title(self):
+        path = self._write_jsonl([
+            _make_assistant_record(),
+            _make_ai_title_record(title="AI guess"),
+            _make_custom_title_record(title="User label"),
+        ])
+        metas, _, _, _ = parse_jsonl_file(path)
+        self.assertEqual(metas[0]["topic"], "User label")
+
+    def test_custom_title_not_overridden_by_later_ai_title(self):
+        path = self._write_jsonl([
+            _make_assistant_record(),
+            _make_custom_title_record(title="User label"),
+            _make_ai_title_record(title="AI guess"),
+        ])
+        metas, _, _, _ = parse_jsonl_file(path)
+        self.assertEqual(metas[0]["topic"], "User label")
+
+    def test_no_title_record_leaves_topic_empty(self):
+        # No fallback to the first user message, even when its text is present
+        # (#147) — an untitled session gets an empty Topic column, not the prompt.
+        path = self._write_jsonl([
+            _make_user_record_with_text(text="Please fix the login bug"),
+            _make_assistant_record(),
+        ])
+        metas, _, _, _ = parse_jsonl_file(path)
+        self.assertIsNone(metas[0]["topic"])
+
+
+class TestSessionTopicScan(unittest.TestCase):
+    """Topic persistence through scan(): DB write, incremental capture, and the
+    no-phantom-row guard (#147)."""
+
+    def setUp(self):
+        self.tmpdir = tempfile.mkdtemp()
+        self.projects_dir = Path(self.tmpdir) / "projects" / "user" / "proj"
+        self.projects_dir.mkdir(parents=True)
+        self.db_path = Path(self.tmpdir) / "usage.db"
+        self.filepath = self.projects_dir / "sess-1.jsonl"
+
+    def _scan(self):
+        return scan(projects_dir=self.projects_dir.parent.parent,
+                    db_path=self.db_path, verbose=False)
+
+    def _topic(self, session_id="sess-1"):
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT topic FROM sessions WHERE session_id = ?",
+                           (session_id,)).fetchone()
+        conn.close()
+        return row["topic"] if row else "<<no row>>"
+
+    def test_topic_persisted_to_db(self):
+        with open(self.filepath, "w") as f:
+            f.write(_make_user_record(session_id="sess-1",
+                                      timestamp="2026-04-08T09:00:00Z") + "\n")
+            f.write(_make_assistant_record(session_id="sess-1",
+                                           timestamp="2026-04-08T09:01:00Z") + "\n")
+            f.write(_make_custom_title_record(session_id="sess-1",
+                                              title="Release day") + "\n")
+        self._scan()
+        self.assertEqual(self._topic(), "Release day")
+
+    def test_topic_captured_when_title_arrives_in_later_scan(self):
+        # First scan: turns only, no title -> empty. Claude Code appends the
+        # ai-title later; the incremental rescan must pick it up via the UPDATE
+        # path. Regression guard for the phantom-INSERT change.
+        import time
+        with open(self.filepath, "w") as f:
+            f.write(_make_user_record(session_id="sess-1",
+                                      timestamp="2026-04-08T09:00:00Z") + "\n")
+            f.write(_make_assistant_record(session_id="sess-1",
+                                           timestamp="2026-04-08T09:01:00Z") + "\n")
+        self._scan()
+        self.assertIsNone(self._topic())
+
+        time.sleep(0.05)
+        with open(self.filepath, "a") as f:
+            f.write(_make_ai_title_record(session_id="sess-1",
+                                          title="Generated title") + "\n")
+        self._scan()
+        self.assertEqual(self._topic(), "Generated title")
+
+    def test_topic_preserved_when_later_scan_has_no_title(self):
+        import time
+        with open(self.filepath, "w") as f:
+            f.write(_make_user_record(session_id="sess-1",
+                                      timestamp="2026-04-08T09:00:00Z") + "\n")
+            f.write(_make_assistant_record(session_id="sess-1",
+                                           timestamp="2026-04-08T09:01:00Z") + "\n")
+            f.write(_make_custom_title_record(session_id="sess-1",
+                                              title="Keep me") + "\n")
+        self._scan()
+        self.assertEqual(self._topic(), "Keep me")
+
+        time.sleep(0.05)
+        with open(self.filepath, "a") as f:
+            f.write(_make_assistant_record(session_id="sess-1",
+                                           timestamp="2026-04-08T09:05:00Z",
+                                           input_tokens=200, output_tokens=100) + "\n")
+        self._scan()
+        # A later, title-less rescan must not wipe the stored topic.
+        self.assertEqual(self._topic(), "Keep me")
+
+    def test_title_only_session_creates_no_phantom_row(self):
+        # A record stream with a title but no turns for that session must not
+        # INSERT a token-less phantom row.
+        with open(self.filepath, "w") as f:
+            f.write(_make_user_record(session_id="sess-1",
+                                      timestamp="2026-04-08T09:00:00Z") + "\n")
+            f.write(_make_assistant_record(session_id="sess-1",
+                                           timestamp="2026-04-08T09:01:00Z") + "\n")
+            f.write(_make_custom_title_record(session_id="ghost",
+                                              title="Orphan") + "\n")
+        self._scan()
+        self.assertEqual(self._topic("ghost"), "<<no row>>")  # no phantom row
+        self.assertIsNone(self._topic("sess-1"))  # real session, just no title
 
 
 if __name__ == "__main__":

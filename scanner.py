@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 # runtime version has to live here as a constant. Keep this in lockstep with the
 # top CHANGELOG heading and vscode-extension/package.json (a parity test guards
 # all three; see tests/test_version.py).
-VERSION = "1.5.3"
+VERSION = "1.5.4"
 
 PROJECTS_DIR = Path.home() / ".claude" / "projects"
 XCODE_PROJECTS_DIR = Path.home() / "Library" / "Developer" / "Xcode" / "CodingAssistant" / "ClaudeAgentConfig" / "projects"
@@ -112,7 +112,8 @@ def init_db(conn):
     _ensure_column(conn, "turns", "agent_id", "TEXT")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_subagent ON turns(is_subagent)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_turns_agent_id ON turns(agent_id)")
-    # Session topic (first user prompt, added in a later schema version)
+    # Session topic (from custom-title / ai-title records; added in a later
+    # schema version)
     _ensure_column(conn, "sessions", "topic", "TEXT")
     # Conditional unique index: only dedup non-null message IDs
     conn.execute("""
@@ -127,27 +128,6 @@ def _ensure_column(conn, table, column, decl):
     cols = {r["name"] for r in conn.execute(f"PRAGMA table_info({table})")}
     if column not in cols:
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
-
-
-MAX_TOPIC_LENGTH = 100
-
-
-def _extract_user_topic(record):
-    """Extract the first real user prompt text from a user-type record.
-
-    Skips IDE context blocks (text starting with '<') such as
-    ``<ide_opened_file>`` or ``<ide_selection>`` injected by the VS Code
-    extension, returning only genuine user input.
-    """
-    msg = record.get("message")
-    if not isinstance(msg, dict):
-        return None
-    for block in msg.get("content", []):
-        if isinstance(block, dict) and block.get("type") == "text":
-            text = (block.get("text") or "").strip()
-            if text and not text.startswith("<"):
-                return text[:MAX_TOPIC_LENGTH]
-    return None
 
 
 def _extract_title(record):
@@ -335,12 +315,6 @@ def parse_jsonl_file(filepath):
                     if git_branch and not meta["git_branch"]:
                         meta["git_branch"] = git_branch
 
-                # Fall back to first user prompt if no title record exists
-                if rtype == "user" and not session_meta[session_id].get("topic"):
-                    topic = _extract_user_topic(record)
-                    if topic:
-                        session_meta[session_id]["topic"] = topic
-
                 if rtype == "assistant":
                     msg = record.get("message", {})
                     usage = msg.get("usage", {})
@@ -439,6 +413,13 @@ def upsert_sessions(conn, sessions):
             "total_cache_creation, turn_count FROM sessions WHERE session_id = ?",
             (s["session_id"],)
         ).fetchone()
+
+        # A session seen only via a title record (custom-title / ai-title carry a
+        # sessionId but no timestamp) has no real content. Don't let it INSERT a
+        # phantom, token-less row; if the session already exists it still falls
+        # through to the UPDATE below and sets its topic.
+        if existing is None and not s.get("first_timestamp"):
+            continue
 
         if existing is None:
             conn.execute("""
@@ -646,12 +627,6 @@ def scan(projects_dir=None, projects_dirs=None, db_path=DB_PATH, verbose=True):
                                 meta["last_timestamp"] = timestamp
                             if timestamp and (not meta["first_timestamp"] or timestamp < meta["first_timestamp"]):
                                 meta["first_timestamp"] = timestamp
-
-                        # Fall back to first user prompt if no title record exists
-                        if rtype == "user" and not new_session_metas[session_id].get("topic"):
-                            topic = _extract_user_topic(record)
-                            if topic:
-                                new_session_metas[session_id]["topic"] = topic
 
                         if rtype == "assistant":
                             msg = record.get("message", {})

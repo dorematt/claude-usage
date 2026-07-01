@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.5.4 — TBD
+
+### Dashboard
+
+- Added a **Topic** column to the Recent Sessions table (and its CSV export), derived from Claude Code's own session titles: a user-set `custom-title` takes priority over an AI-generated `ai-title`. Sessions without a title record show an empty Topic — there is no fallback to the first user message, so prompt text never leaks into the table (#147, thanks @arojunior).
+
+### Scanner
+
+- The scanner now parses `custom-title` / `ai-title` transcript records into a new `sessions.topic` column (additive in-place migration; existing DBs upgrade without a rebuild). Titles are captured even when Claude Code appends them after the turns (picked up on the next incremental scan), and a title-only record can never create a token-less phantom session row (#147, thanks @arojunior).
+
 ## v1.5.3 — 2026-07-01
 
 ### Packaging
