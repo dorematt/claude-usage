@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.5.3 — TBD
+
+### Packaging
+
+- Added a `pyproject.toml` so the tool installs with `uv tool install git+https://github.com/phuryn/claude-usage` (or `pipx install …`) — no clone needed (#144, thanks @jamesbraza). Packaging only: `[project.dependencies]` is empty so the tool stays stdlib-only at runtime, the version is read dynamically from `scanner.VERSION` (still the single source of truth), and the clone + `python cli.py` path is unchanged. The `cli.py` `__main__` block was lifted into a `main()` function to serve as the `claude-usage` console entry point.
+
 ## v1.5.2 — 2026-07-01
 
 ### Packaging

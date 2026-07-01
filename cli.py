@@ -459,7 +459,8 @@ def parse_named_arg(args, flag):
             return args[i + 1]
     return None
 
-if __name__ == "__main__":
+def main():
+    """Console entry point (``claude-usage``) and ``python cli.py`` dispatch."""
     if len(sys.argv) >= 2 and sys.argv[1] in ("--version", "-V", "version"):
         print(VERSION)
         sys.exit(0)
@@ -484,3 +485,7 @@ if __name__ == "__main__":
         cmd_scan(projects_dir=projects_dir)
     else:
         COMMANDS[command]()
+
+
+if __name__ == "__main__":
+    main()

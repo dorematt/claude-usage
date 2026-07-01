@@ -52,6 +52,14 @@ claude-usage dashboard
 
 After install, the `claude-usage` command is on your `PATH` and accepts the same subcommands as `python cli.py` (`scan`, `today`, `stats`, `dashboard`).
 
+### Any OS (uv tool / pipx)
+```
+uv tool install git+https://github.com/phuryn/claude-usage
+claude-usage dashboard
+```
+
+Installs the `claude-usage` command without a clone (works with [`pipx`](https://pipx.pypa.io/) too: `pipx install git+https://github.com/phuryn/claude-usage`). The tool stays dependency-free — this only adds packaging metadata, no third-party runtime deps (#144).
+
 ### macOS / Linux (clone)
 ```
 git clone https://github.com/phuryn/claude-usage
