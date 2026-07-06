@@ -1172,12 +1172,13 @@ function applyFilter() {
   // Daily chart: aggregate by day
   const dailyMap = {};
   for (const r of filteredDaily) {
-    if (!dailyMap[r.day]) dailyMap[r.day] = { day: r.day, input: 0, output: 0, cache_read: 0, cache_creation: 0 };
+    if (!dailyMap[r.day]) dailyMap[r.day] = { day: r.day, input: 0, output: 0, cache_read: 0, cache_creation: 0, cost: 0 };
     const d = dailyMap[r.day];
     d.input          += r.input;
     d.output         += r.output;
     d.cache_read     += r.cache_read;
     d.cache_creation += r.cache_creation;
+    d.cost           += calcCost(r.model, r.input, r.output, r.cache_read, r.cache_creation);
   }
   const daily = Object.values(dailyMap).sort((a, b) => a.day.localeCompare(b.day));
 
@@ -1446,15 +1447,24 @@ function renderDailyChart(daily) {
         { label: 'Output',         hidden: hiddenSeries.daily.has('Output'),         data: daily.map(d => d.output),         backgroundColor: TOKEN_COLORS.output,         hoverBackgroundColor: TOKEN_HOVER.output,         stack: 'io',    yAxisID: 'y1' },
         { label: 'Cache Read',     hidden: hiddenSeries.daily.has('Cache Read'),     data: daily.map(d => d.cache_read),     backgroundColor: TOKEN_COLORS.cache_read,     hoverBackgroundColor: TOKEN_HOVER.cache_read,     stack: 'cache', yAxisID: 'y' },
         { label: 'Cache Creation', hidden: hiddenSeries.daily.has('Cache Creation'), data: daily.map(d => d.cache_creation), backgroundColor: TOKEN_COLORS.cache_creation, hoverBackgroundColor: TOKEN_HOVER.cache_creation, stack: 'cache', yAxisID: 'y' },
+        { type: 'line', label: 'Est. Cost', hidden: hiddenSeries.daily.has('Est. Cost'), data: daily.map(d => d.cost), borderColor: C.accent, backgroundColor: 'transparent', pointBackgroundColor: C.accent, pointRadius: 3, tension: 0.3, yAxisID: 'y2' },
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false, resizeDelay: 150,
-      plugins: { legend: { onClick: legendToggle('daily'), labels: { color: C.axis, boxWidth: 12 } } },
+      plugins: {
+        legend: { onClick: legendToggle('daily'), labels: { color: C.axis, boxWidth: 12 } },
+        tooltip: { callbacks: {
+          label: item => item.dataset.label === 'Est. Cost'
+            ? ` Est. Cost: ${fmtCost(item.raw)}`
+            : ` ${item.dataset.label}: ${fmt(item.raw)}`
+        }}
+      },
       scales: {
-        x: { ticks: { color: C.axis, maxTicksLimit: RANGE_TICKS[selectedRange] }, grid: { color: C.border } },
-        y:  { position: 'left',  ticks: { color: C.green, callback: v => fmt(v) }, grid: { color: C.border }, title: { display: true, text: 'Cache', color: C.green } },
-        y1: { position: 'right', ticks: { color: C.blue, callback: v => fmt(v) }, grid: { drawOnChartArea: false },    title: { display: true, text: 'Input / Output', color: C.blue } },
+        x:  { ticks: { color: C.axis, maxTicksLimit: RANGE_TICKS[selectedRange] }, grid: { color: C.border } },
+        y:  { position: 'left',  ticks: { color: C.green,  callback: v => fmt(v) },         grid: { color: C.border },          title: { display: true, text: 'Cache',         color: C.green } },
+        y1: { position: 'right', ticks: { color: C.blue,   callback: v => fmt(v) },         grid: { drawOnChartArea: false },    title: { display: true, text: 'Input / Output', color: C.blue } },
+        y2: { position: 'right', ticks: { color: C.accent, callback: v => '$' + v.toFixed(2) }, grid: { drawOnChartArea: false }, title: { display: true, text: 'Est. Cost', color: C.accent }, offset: true },
       }
     }
   });
