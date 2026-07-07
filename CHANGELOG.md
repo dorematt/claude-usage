@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.5.5 — TBD
+
+### Scanner / CLI
+
+- The `today`, `week`, and `stats` commands now run the idempotent schema migration when they open the database, so reading before the next `scan` no longer crashes with `sqlite3.OperationalError: no such column: is_subagent` on a database created before subagent tracking existed. The dashboard already did this; the CLI read path now matches.
+
 ## v1.5.4 — 2026-07-01
 
 ### Dashboard
