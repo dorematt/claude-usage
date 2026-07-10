@@ -109,7 +109,10 @@ python cli.py stats
 # Scan + open browser dashboard at http://localhost:8080
 python cli.py dashboard
 
-# Custom host and port via environment variables
+# Custom host and port
+python cli.py dashboard --host 0.0.0.0 --port 9000
+
+# Environment variables are also supported
 HOST=0.0.0.0 PORT=9000 python cli.py dashboard
 
 # Scan a custom projects directory
@@ -133,7 +136,7 @@ Claude Code writes one JSONL file per session to `~/.claude/projects/`. Each lin
 
 `scanner.py` parses those files and stores the data in a SQLite database at `~/.claude/usage.db`.
 
-`dashboard.py` serves a single-page dashboard on `localhost:8080` with Chart.js charts (loaded from CDN). It auto-refreshes every 30 seconds and supports model filtering and a date-range dropdown with bookmarkable URLs. A sticky section nav jumps between sections, and every chart/table can be collapsed (remembered across reloads). The bind address and port can be overridden with `HOST` and `PORT` environment variables (defaults: `localhost`, `8080`).
+`dashboard.py` serves a single-page dashboard on `localhost:8080` with Chart.js charts (loaded from CDN). It auto-refreshes every 30 seconds and supports model filtering and a date-range dropdown with bookmarkable URLs. A sticky section nav jumps between sections, and every chart/table can be collapsed (remembered across reloads). The bind address and port can be configured with the `--host` and `--port` flags, or the `HOST` and `PORT` environment variables (defaults: `localhost`, `8080`).
 
 ---
 
