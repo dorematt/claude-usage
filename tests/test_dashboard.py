@@ -3,6 +3,8 @@
 import json
 import os
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -16,6 +18,17 @@ try:
     from http.server import HTTPServer
 except ImportError:
     HTTPServer = None
+
+
+class TestDashboardImport(unittest.TestCase):
+    def test_dashboard_imports_from_repository_root(self):
+        result = subprocess.run(
+            [sys.executable, "-c", "import dashboard"],
+            cwd=Path(__file__).resolve().parents[1],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 class TestGetDashboardData(unittest.TestCase):
