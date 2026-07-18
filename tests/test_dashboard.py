@@ -30,6 +30,15 @@ class TestDashboardImport(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_dashboard_imports_as_package_from_parent_repository(self):
+        result = subprocess.run(
+            [sys.executable, "-c", "import claude_usage.dashboard"],
+            cwd=Path(__file__).resolve().parents[2],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
 
 class TestGetDashboardData(unittest.TestCase):
     def setUp(self):

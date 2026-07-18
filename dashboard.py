@@ -27,36 +27,6 @@ DB_PATH = Path(os.environ.get("CLAUDE_USAGE_DB", Path.home() / ".claude" / "usag
 SURFACE = "web"
 
 
-def _tz_date_expr(col):
-    """SQLite expression that converts a UTC ISO8601 column to local-timezone date string.
-
-    Uses the OS local timezone offset at call time (respects DST). Falls back
-    to plain substr() if the offset cannot be determined.
-    """
-    try:
-        offset_s = datetime.now().astimezone().utcoffset().total_seconds()
-        h = int(abs(offset_s) // 3600)
-        m = int((abs(offset_s) % 3600) // 60)
-        sign = '+' if offset_s >= 0 else '-'
-        parts = [f"'{sign}{h} hours'"]
-        if m:
-            parts.append(f"'{sign}{m} minutes'")
-        mods = ', '.join(parts)
-        return f"substr(datetime({col}, {mods}), 1, 10)"
-    except Exception:
-        return f"substr({col}, 1, 10)"
-
-
-def _to_local_date(ts_str):
-    """Convert a UTC ISO8601 timestamp string to local-timezone date string (YYYY-MM-DD)."""
-    if not ts_str:
-        return ""
-    try:
-        return datetime.fromisoformat(ts_str.replace("Z", "+00:00")).astimezone().strftime("%Y-%m-%d")
-    except Exception:
-        return (ts_str or "")[:10]
-
-
 def get_dashboard_data(db_path=DB_PATH):
     if not db_path.exists():
         return {"error": "Database not found. Run: python cli.py scan"}
@@ -76,10 +46,6 @@ def get_dashboard_data(db_path=DB_PATH):
     # so this is a cheap no-op once migrated.
     init_db(conn)
 
-    # Compute local-timezone date SQL expressions once per call (respects DST).
-    _day_expr = _tz_date_expr("timestamp")
-    _t_day_expr = _tz_date_expr("t.timestamp")
-
     # ── All models (for filter UI) ────────────────────────────────────────────
     # GROUP BY uses the normalised expression too so NULL and '' don't end up
     # as two separate "unknown" rows.
@@ -92,9 +58,9 @@ def get_dashboard_data(db_path=DB_PATH):
     all_models = [r["model"] for r in model_rows]
 
     # ── Daily per-model, ALL history (client filters by range) ────────────────
-    daily_rows = conn.execute(f"""
+    daily_rows = conn.execute("""
         SELECT
-            {_day_expr}   as day,
+            substr(timestamp, 1, 10)   as day,
             COALESCE(NULLIF(model, ''), 'unknown') as model,
             SUM(input_tokens)          as input,
             SUM(output_tokens)         as output,
@@ -166,7 +132,7 @@ def get_dashboard_data(db_path=DB_PATH):
             "branch":        r["git_branch"] or "",
             "topic":         r["topic"] or "",
             "last":          (r["last_timestamp"] or "")[:16].replace("T", " "),
-            "last_date":     _to_local_date(r["last_timestamp"]),
+            "last_date":     (r["last_timestamp"] or "")[:10],
             "duration_min":  duration_min,
             "model":         r["model"] or "unknown",
             "turns":         r["turn_count"] or 0,
@@ -188,7 +154,7 @@ def get_dashboard_data(db_path=DB_PATH):
 
     subagent_daily_rows = conn.execute(f"""
         SELECT
-            {_t_day_expr}               as day,
+            substr(t.timestamp, 1, 10)               as day,
             {AGENT_TYPE_EXPR}                        as agent_type,
             COALESCE(NULLIF(t.model, ''), 'unknown') as model,
             SUM(t.input_tokens)                      as input,
@@ -245,7 +211,7 @@ def get_dashboard_data(db_path=DB_PATH):
         "agent_type":     r["agent_type"],
         "model":          r["model"],
         "start":          (r["start_ts"] or "")[:16].replace("T", " "),
-        "start_date":     _to_local_date(r["start_ts"]),
+        "start_date":     (r["start_ts"] or "")[:10],
         "input":          r["input"] or 0,
         "output":         r["output"] or 0,
         "cache_read":     r["cache_read"] or 0,
